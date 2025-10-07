@@ -1,0 +1,8 @@
+# Minimal requirements to run the application quickly
+Flask>=2.3.0
+numpy>=1.24.0
+omegaconf>=2.3.0
+librosa>=0.10.0
+soundfile>=0.12.1
+matplotlib>=3.7.0
+pandas>=2.0.0

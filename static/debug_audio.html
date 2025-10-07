@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Audio Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+        canvas { border: 2px solid #333; margin: 10px 0; background: #000; }
+        .debug { margin: 10px 0; padding: 10px; background: #f0f0f0; border: 1px solid #ccc; }
+        .error { background: #ffebee; border-color: #f44336; color: #c62828; }
+        .success { background: #e8f5e8; border-color: #4caf50; color: #2e7d32; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Audio Recording Debug Test</h1>
+    
+    <button id="startBtn">🎤 Start Recording</button>
+    <button id="stopBtn" disabled>⏹️ Stop Recording</button>
+    <button id="playBtn" disabled>▶️ Play Recording</button>
+    <button id="testBtn">🧪 Test Visualization</button>
+    
+    <div>
+        <canvas id="visualizer" width="400" height="100"></canvas>
+    </div>
+    
+    <div class="debug" id="debug">Ready to debug...</div>
+    <div class="debug" id="results"></div>
+
+    <script>
+        class AudioDebugger {
+            constructor() {
+                this.mediaRecorder = null;
+                this.audioChunks = [];
+                this.isRecording = false;
+                this.audioContext = null;
+                this.analyser = null;
+                this.dataArray = null;
+                this.animationFrame = null;
+                this.recordedAudio = null;
+                
+                this.startBtn = document.getElementById('startBtn');
+                this.stopBtn = document.getElementById('stopBtn');
+                this.playBtn = document.getElementById('playBtn');
+                this.testBtn = document.getElementById('testBtn');
+                this.visualizer = document.getElementById('visualizer');
+                this.debug = document.getElementById('debug');
+                this.results = document.getElementById('results');
+                
+                this.setupEventListeners();
+                this.initAudioContext();
+                this.testCanvas();
+            }
+            
+            setupEventListeners() {
+                this.startBtn.addEventListener('click', () => this.startRecording());
+                this.stopBtn.addEventListener('click', () => this.stopRecording());
+                this.playBtn.addEventListener('click', () => this.playRecording());
+                this.testBtn.addEventListener('click', () => this.testVisualization());
+            }
+            
+            testCanvas() {
+                const canvas = this.visualizer;
+                const ctx = canvas.getContext('2d');
+                
+                // Test canvas drawing
+                ctx.fillStyle = '#333';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#0f0';
+                ctx.fillRect(50, 50, 100, 20);
+                ctx.fillStyle = '#fff';
+                ctx.font = '12px Arial';
+                ctx.fillText('Canvas Test', 60, 65);
+                
+                this.log('Canvas test completed - should see green rectangle', 'success');
+            }
+            
+            initAudioContext() {
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.analyser = this.audioContext.createAnalyser();
+                    this.analyser.fftSize = 256;
+                    this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+                    this.log('✅ Audio context initialized successfully', 'success');
+                    this.log(`Analyser frequency bin count: ${this.analyser.frequencyBinCount}`, 'success');
+                } catch (error) {
+                    this.log('❌ Audio context initialization failed: ' + error.message, 'error');
+                }
+            }
+            
+            async startRecording() {
+                try {
+                    this.log('🎤 Requesting microphone access...', 'debug');
+                    
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            sampleRate: 16000
+                        } 
+                    });
+                    
+                    this.log('✅ Microphone access granted', 'success');
+                    
+                    // Test if we can get audio data
+                    if (this.audioContext && this.analyser) {
+                        const source = this.audioContext.createMediaStreamSource(stream);
+                        source.connect(this.analyser);
+                        this.log('✅ Audio stream connected to analyser', 'success');
+                        
+                        // Test if we get any data
+                        this.analyser.getByteFrequencyData(this.dataArray);
+                        const maxValue = Math.max(...this.dataArray);
+                        this.log(`Audio data max value: ${maxValue}`, maxValue > 0 ? 'success' : 'debug');
+                    }
+                    
+                    this.mediaRecorder = new MediaRecorder(stream);
+                    this.audioChunks = [];
+                    this.isRecording = true;
+                    
+                    this.mediaRecorder.ondataavailable = (event) => {
+                        this.audioChunks.push(event.data);
+                        this.log(`📊 Audio chunk received: ${event.data.size} bytes`);
+                    };
+                    
+                    this.mediaRecorder.onstop = () => {
+                        this.processRecording();
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+                    
+                    this.mediaRecorder.start();
+                    this.startVisualization();
+                    this.updateUI();
+                    
+                    this.log('🎙️ Recording started - speak now!', 'success');
+                    
+                } catch (error) {
+                    this.log('❌ Recording failed: ' + error.message, 'error');
+                }
+            }
+            
+            startVisualization() {
+                if (!this.audioContext || !this.analyser) {
+                    this.log('❌ Cannot start visualization - audio context or analyser missing', 'error');
+                    return;
+                }
+                
+                const canvas = this.visualizer;
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+                
+                this.log('🎨 Starting visualization...', 'debug');
+                
+                const draw = () => {
+                    if (!this.isRecording) {
+                        this.log('⏹️ Stopping visualization - recording ended');
+                        return;
+                    }
+                    
+                    this.animationFrame = requestAnimationFrame(draw);
+                    this.analyser.getByteFrequencyData(this.dataArray);
+                    
+                    // Clear canvas
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(0, 0, width, height);
+                    
+                    // Draw visualization
+                    const barWidth = (width / this.dataArray.length) * 2.5;
+                    let x = 0;
+                    let hasData = false;
+                    
+                    for (let i = 0; i < this.dataArray.length; i++) {
+                        const barHeight = (this.dataArray[i] / 255) * height * 0.8;
+                        
+                        if (this.dataArray[i] > 0) {
+                            hasData = true;
+                        }
+                        
+                        // Color based on intensity
+                        const intensity = this.dataArray[i] / 255;
+                        const r = Math.floor(255 * intensity);
+                        const g = Math.floor(255 * (1 - intensity));
+                        const b = 50;
+                        
+                        ctx.fillStyle = `rgb(${r},${g},${b})`;
+                        ctx.fillRect(x, height - barHeight, barWidth, barHeight);
+                        
+                        x += barWidth + 1;
+                    }
+                    
+                    // Log if we have audio data (only once)
+                    if (hasData && !this.hasLoggedAudioData) {
+                        this.log('🎵 Audio data detected in visualization!', 'success');
+                        this.hasLoggedAudioData = true;
+                    }
+                };
+                
+                draw();
+                this.log('✅ Visualization started', 'success');
+            }
+            
+            testVisualization() {
+                this.log('🧪 Testing visualization manually...', 'debug');
+                
+                const canvas = this.visualizer;
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+                
+                // Clear canvas
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, width, height);
+                
+                // Draw test bars
+                for (let i = 0; i < 50; i++) {
+                    const barHeight = Math.random() * height * 0.8;
+                    const barWidth = 8;
+                    const x = i * 10;
+                    
+                    ctx.fillStyle = `rgb(${Math.random() * 255}, ${Math.random() * 255}, 100)`;
+                    ctx.fillRect(x, height - barHeight, barWidth, barHeight);
+                }
+                
+                this.log('✅ Manual visualization test completed - should see colorful bars', 'success');
+            }
+            
+            stopRecording() {
+                if (this.mediaRecorder && this.isRecording) {
+                    this.mediaRecorder.stop();
+                    this.isRecording = false;
+                    this.stopVisualization();
+                    this.updateUI();
+                    this.log('⏹️ Recording stopped', 'debug');
+                }
+            }
+            
+            stopVisualization() {
+                if (this.animationFrame) {
+                    cancelAnimationFrame(this.animationFrame);
+                    this.animationFrame = null;
+                }
+                
+                const canvas = this.visualizer;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#333';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = '14px Arial';
+                ctx.fillText('Recording Stopped', 150, 50);
+                
+                this.log('🛑 Visualization stopped');
+            }
+            
+            processRecording() {
+                const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+                this.log(`📊 Recording complete: ${audioBlob.size} bytes`, 'success');
+                
+                // Create audio element for playback
+                const audioUrl = URL.createObjectURL(audioBlob);
+                this.recordedAudio = new Audio(audioUrl);
+                
+                this.playBtn.disabled = false;
+                
+                // Send to server
+                this.sendToServer(audioBlob);
+            }
+            
+            async sendToServer(audioBlob) {
+                const formData = new FormData();
+                formData.append('file', audioBlob, 'recording.webm');
+                
+                try {
+                    this.log('📤 Sending to server...', 'debug');
+                    
+                    const response = await fetch('/transcribe', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    this.log(`📥 Server response: ${response.status}`, response.ok ? 'success' : 'error');
+                    
+                    if (response.ok) {
+                        const result = await response.text();
+                        this.log('✅ Server processing successful!', 'success');
+                        this.results.innerHTML = '<h3>Server Response:</h3>' + result;
+                    } else {
+                        const errorText = await response.text();
+                        this.log('❌ Server error: ' + errorText, 'error');
+                    }
+                } catch (error) {
+                    this.log('❌ Server request failed: ' + error.message, 'error');
+                }
+            }
+            
+            playRecording() {
+                if (this.recordedAudio) {
+                    this.recordedAudio.play();
+                    this.log('▶️ Playing recording...', 'debug');
+                }
+            }
+            
+            updateUI() {
+                this.startBtn.disabled = this.isRecording;
+                this.stopBtn.disabled = !this.isRecording;
+            }
+            
+            log(message, type = 'debug') {
+                const timestamp = new Date().toLocaleTimeString();
+                const logElement = document.createElement('div');
+                logElement.className = `debug ${type}`;
+                logElement.textContent = `[${timestamp}] ${message}`;
+                this.debug.appendChild(logElement);
+                this.debug.scrollTop = this.debug.scrollHeight;
+                
+                // Also log to console
+                console.log(`[${timestamp}] ${message}`);
+            }
+        }
+        
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new AudioDebugger();
+        });
+    </script>
+</body>
+</html>

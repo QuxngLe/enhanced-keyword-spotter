@@ -216,21 +216,143 @@ def convert_audio_to_mfcc(audio_file_path: str,
 
 def check_fileType(filename: str, extension: str) -> bool:
     """
-    Helper function to check the extension of a file.
+    Enhanced helper function to check the extension of a file.
+    Supports multiple audio formats and better validation.
 
     Parameters
     ----------
     filename: str
         Input filename
     extension: str
-        File extension to check.
+        File extension to check. Can be single extension or list.
 
     Returns
     -------
-        bool: True if a file exists, else False.
+        bool: True if file has valid extension, else False.
     """
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in extension
+    if not filename or '.' not in filename:
+        return False
+    
+    file_ext = filename.rsplit('.', 1)[1].lower()
+    
+    # Handle multiple extensions
+    if isinstance(extension, list):
+        return file_ext in [ext.lower().lstrip('.') for ext in extension]
+    elif isinstance(extension, str):
+        # Support comma-separated extensions
+        if ',' in extension:
+            extensions = [ext.strip().lower().lstrip('.') for ext in extension.split(',')]
+            return file_ext in extensions
+        else:
+            return file_ext == extension.lower().lstrip('.')
+    
+    return False
+
+def validate_audio_file(file_path: str, max_size_mb: int = 10) -> dict:
+    """
+    Comprehensive audio file validation.
+    
+    Parameters
+    ----------
+    file_path: str
+        Path to the audio file
+    max_size_mb: int
+        Maximum file size in MB
+        
+    Returns
+    -------
+    dict: Validation result with status and message
+    """
+    import os
+    
+    validation_result = {
+        'valid': False,
+        'message': '',
+        'file_size': 0,
+        'duration': 0
+    }
+    
+    try:
+        # Check if file exists
+        if not os.path.exists(file_path):
+            validation_result['message'] = 'File does not exist'
+            return validation_result
+        
+        # Check file size
+        file_size = os.path.getsize(file_path)
+        file_size_mb = file_size / (1024 * 1024)
+        validation_result['file_size'] = file_size_mb
+        
+        if file_size_mb > max_size_mb:
+            validation_result['message'] = f'File too large: {file_size_mb:.1f}MB (max: {max_size_mb}MB)'
+            return validation_result
+        
+        # Check file extension
+        valid_extensions = ['.wav', '.mp3', '.flac', '.m4a', '.ogg']
+        if not check_fileType(os.path.basename(file_path), valid_extensions):
+            validation_result['message'] = 'Unsupported audio format'
+            return validation_result
+        
+        # Try to load with librosa to validate audio format
+        try:
+            import librosa
+            audio, sr = librosa.load(file_path, sr=None)
+            duration = len(audio) / sr
+            validation_result['duration'] = duration
+            
+            # Check duration (should be reasonable for keyword spotting)
+            if duration > 10:  # 10 seconds max
+                validation_result['message'] = f'Audio too long: {duration:.1f}s (max: 10s)'
+                return validation_result
+            
+            if duration < 0.1:  # 0.1 seconds min
+                validation_result['message'] = f'Audio too short: {duration:.1f}s (min: 0.1s)'
+                return validation_result
+                
+        except Exception as e:
+            validation_result['message'] = f'Invalid audio file: {str(e)}'
+            return validation_result
+        
+        validation_result['valid'] = True
+        validation_result['message'] = 'File validation successful'
+        
+    except Exception as e:
+        validation_result['message'] = f'Validation error: {str(e)}'
+    
+    return validation_result
+
+def convert_audio_format(input_path: str, output_path: str, target_format: str = 'wav') -> bool:
+    """
+    Convert audio file to target format using librosa.
+    
+    Parameters
+    ----------
+    input_path: str
+        Path to input audio file
+    output_path: str
+        Path for output file
+    target_format: str
+        Target format (wav, mp3, flac)
+        
+    Returns
+    -------
+    bool: True if conversion successful, False otherwise
+    """
+    try:
+        import librosa
+        import soundfile as sf
+        
+        # Load audio
+        audio, sr = librosa.load(input_path, sr=16000)  # Standardize to 16kHz
+        
+        # Save in target format
+        sf.write(output_path, audio, sr, format=target_format.upper())
+        
+        return True
+        
+    except Exception as e:
+        print(f"Audio conversion failed: {str(e)}")
+        return False
 
 
 def print_shape(name: str, arr: np.array) -> None:

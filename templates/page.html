@@ -1,42 +1,142 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Keyword Spotter - MLOps Demo</title>
+    <title>Keyword Spotter - Advanced MLOps Demo</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='page.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 
 <body>
     <div class="banner">
         <div class="content">
-            <h1>Keyword Spotter</h1>
-            <p>Try out the deployed keyword spotting model trained on audio data. <br> Currently,
-                the model recognizes only short one second audio. </p>
-            <h2>Upload .wav audio file</h2>
-                <br>
+            <h1>🎤 Advanced Keyword Spotter</h1>
+            <p>AI-powered keyword recognition with real-time recording and batch processing</p>
+            
+            <!-- Tab Navigation -->
+            <div class="tab-container">
+                <button class="tab-button active" onclick="openTab(event, 'realtime')">🎙️ Real-time Recording</button>
+                <button class="tab-button" onclick="openTab(event, 'upload')">📁 File Upload</button>
+                <button class="tab-button" onclick="openTab(event, 'batch')">📊 Batch Processing</button>
+                <button class="tab-button" onclick="openTab(event, 'dashboard')">📈 Model Dashboard</button>
+            </div>
+
+            <!-- Real-time Recording Tab -->
+            <div id="realtime" class="tab-content active">
+                <h2>🎙️ Real-time Audio Recording</h2>
+                <div class="audio-controls">
+                    <button id="startRecord" class="btn btn-primary">
+                        <span class="icon">🎤</span> Start Recording
+                    </button>
+                    <button id="stopRecord" class="btn btn-danger" disabled>
+                        <span class="icon">⏹️</span> Stop Recording
+                    </button>
+                    <button id="playRecord" class="btn btn-secondary" disabled>
+                        <span class="icon">▶️</span> Play Recording
+                    </button>
+                </div>
+                
+                <div class="audio-visualizer">
+                    <canvas id="visualizer" width="400" height="100"></canvas>
+                    <div class="recording-status">
+                        <span id="recordingIndicator" class="indicator"></span>
+                        <span id="recordingTime">00:00</span>
+                    </div>
+                </div>
+
+                <div class="progress-container" id="processingProgress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+                    <span class="progress-text">Processing audio...</span>
+                </div>
+            </div>
+
+            <!-- File Upload Tab -->
+            <div id="upload" class="tab-content">
+                <h2>📁 Upload Audio File</h2>
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📁</div>
+                    <p>Drag & drop audio files here or click to browse</p>
+                    <p class="supported-formats">Supported: .wav, .mp3, .flac</p>
+                    <input type="file" id="fileinput" name="file" accept=".wav,.mp3,.flac" multiple/>
+                </div>
+                
+                <div class="file-preview" id="filePreview" style="display: none;">
+                    <h3>Selected Files:</h3>
+                    <ul id="fileList"></ul>
+                </div>
+            </div>
+
+            <!-- Batch Processing Tab -->
+            <div id="batch" class="tab-content">
+                <h2>📊 Batch Processing</h2>
+                <div class="batch-upload">
+                    <input type="file" id="batchFiles" multiple accept=".wav,.mp3,.flac"/>
+                    <button id="processBatch" class="btn btn-primary" disabled>Process All Files</button>
+                </div>
+                <div id="batchResults" class="batch-results"></div>
+            </div>
+
+            <!-- Model Dashboard Tab -->
+            <div id="dashboard" class="tab-content">
+                <h2>📈 Model Performance Dashboard</h2>
+                <div class="dashboard-grid">
+                    <div class="metric-card">
+                        <h3>Model Accuracy</h3>
+                        <div class="metric-value" id="modelAccuracy">82.3%</div>
+                    </div>
+                    <div class="metric-card">
+                        <h3>Total Predictions</h3>
+                        <div class="metric-value" id="totalPredictions">1,247</div>
+                    </div>
+                    <div class="metric-card">
+                        <h3>Avg Processing Time</h3>
+                        <div class="metric-value" id="avgProcessingTime">0.45s</div>
+                    </div>
+                    <div class="metric-card">
+                        <h3>System Status</h3>
+                        <div class="metric-value status-healthy" id="systemStatus">🟢 Healthy</div>
+                    </div>
+                </div>
+                <div class="recent-predictions">
+                    <h3>Recent Predictions</h3>
+                    <div id="recentPredictions"></div>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div class="results-section" id="resultsSection" style="display: none;">
+                <h3>🎯 Prediction Results</h3>
+                <div class="result-card">
+                    <div class="result-keyword" id="resultKeyword"></div>
+                    <div class="result-confidence" id="resultConfidence"></div>
+                    <div class="result-details">
+                        <div class="processing-time">⏱️ Processing Time: <span id="processingTime"></span></div>
+                        <div class="model-version">🤖 Model Version: <span id="modelVersion"></span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Error Messages -->
             {% with messages = get_flashed_messages() %}
                 {% if messages %}
-                    {% for message in messages %}
-                        {{message}}
-                    {% endfor %}
+                    <div class="alert alert-error">
+                        {% for message in messages %}
+                            {{message}}
+                        {% endfor %}
+                    </div>
                 {% endif %}
             {% endwith %}
-                        
-            <form action="{{ url_for('transcribe')}}" method="post" enctype="multipart/form-data">
-                <input type="file" id = "fileinput" name="file"/>
-                <br>
-                <input type="submit" id="submitButton"  value="Transcribe"/>
-            </form>
-                   
-            {% if transcript != "" %}
-                <div id="ResultContainer">
-                    <h3 id="Transcription">{{recognized_keyword}}</h3>
-                    <br>
-                    <h3 id="probability">{{label_probability}}</h3>
-                </div>
-            {% endif %}
 
         </div>
     </div>
 
+    <!-- Hidden form for file uploads -->
+    <form id="uploadForm" action="{{ url_for('transcribe')}}" method="post" enctype="multipart/form-data" style="display: none;">
+        <input type="file" id="hiddenFileInput" name="file"/>
+    </form>
+
+    <script src="{{ url_for('static', filename='audio-recorder.js') }}"></script>
+    <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
 </body>
 </html>
